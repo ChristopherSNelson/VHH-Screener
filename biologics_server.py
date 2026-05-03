@@ -1,5 +1,5 @@
 """
-VHH-Falsifier — FastMCP Developability Screening Server
+VHH-Screener — FastMCP Developability Screening Server
 =====================================================
 
 Provides deterministic, agent-readable tools for evaluating
@@ -29,14 +29,14 @@ from fastmcp import FastMCP
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
-logger = logging.getLogger("vhh-falsifier")
+logger = logging.getLogger("vhh-screener")
 logger.setLevel(logging.INFO)
 
 _handler = logging.FileHandler(LOG_DIR / "biologics_server.log")
 _handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
 logger.addHandler(_handler)
 
-mcp = FastMCP("VHH-Falsifier")
+mcp = FastMCP("VHH-Screener")
 
 
 def _clean_sequence(seq: str) -> str:

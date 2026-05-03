@@ -232,7 +232,7 @@ def execute_tool(name: str, input_args: dict) -> str:
 # System prompt
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = """\
-You are a **Senior Biologics Lead** at Phylo, an agentic drug discovery startup.
+You are a **Senior Biologics Lead** at an agentic drug discovery startup.
 
 ## Mission
 Design a VHH (camelid nanobody) binder for **Human PD-1** that targets the \
@@ -333,7 +333,7 @@ def _plot_biophysical_trajectory(
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 8), facecolor="#0a0a0a")
     fig.suptitle(
-        "VHH-Falsifier: Developability Optimization Dashboard",
+        "VHH-Screener: Developability Optimization Dashboard",
         color="white",
         fontsize=14,
         fontfamily="monospace",
@@ -584,7 +584,7 @@ def run_screening_loop(
     client = OpenAI(api_key=api_key, base_url=BASE_URL)
 
     seed_label = "from seed" if seed_sequence else "zero-shot"
-    header_print(f"VHH-Falsifier — Developability Screening Loop ({seed_label})")
+    header_print(f"VHH-Screener — Developability Screening Loop ({seed_label})")
     cot_print(f"Session started: {datetime.now(timezone.utc).isoformat()}")
     cot_print("Target: Human PD-1 (Pembrolizumab epitope)")
     cot_print("Scaffold: Camelid VHH nanobody")
@@ -818,7 +818,7 @@ def run_screening_loop(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="VHH-Falsifier screening loop")
+    parser = argparse.ArgumentParser(description="VHH-Screener screening loop")
     parser.add_argument(
         "--seed",
         choices=["naive", "pembrolizumab", "none"],

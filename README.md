@@ -1,6 +1,6 @@
-# VHH-Falsifier: Agentic Developability Screening for Nanobody Engineering
+# VHH-Screener: Agentic Developability Screening for Nanobody Engineering
 
-![VHH-Falsifier Developability Screening Loop](assets/infographic.png)
+![VHH-Screener Developability Screening Loop](assets/infographic.png)
 
 ## What This Does
 
@@ -90,8 +90,8 @@ The dashboard is generated automatically at the end of each run, tracking all fo
 ## Quickstart
 
 ```bash
-git clone https://github.com/ChristopherSNelson/VHH-Falsifier.git
-cd VHH-Falsifier
+git clone https://github.com/ChristopherSNelson/VHH-Screener.git
+cd VHH-Screener
 pip install fastmcp biopython openai
 export TOGETHER_API_KEY="your-key-here"
 python agent_loop.py

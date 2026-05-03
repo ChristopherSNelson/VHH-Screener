@@ -2,7 +2,7 @@
   "mcpServers": {
     "biologics": {
       "command": "/Users/chrisnelson/miniconda3/bin/python",
-      "args": ["/Users/chrisnelson/Desktop/VHH-Falsifier/biologics_server.py"]
+      "args": ["/Users/chrisnelson/projects/VHH-Screener/biologics_server.py"]
     }
   }
 }
