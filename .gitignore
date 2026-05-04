@@ -2,3 +2,9 @@ logs/
 __pycache__/
 *.pyc
 .env
+.DS_Store
+**/.DS_Store
+
+# Session-specific working files
+HANDOFF.md
+SCRATCHPAD.md
