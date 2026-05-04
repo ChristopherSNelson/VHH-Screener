@@ -4,9 +4,9 @@
 
 ## What This Does
 
-An LLM agent designs VHH nanobody sequences, then immediately tries to break them. Deterministic tools scan for manufacturing liabilities (deamidation, aggregation, glycosylation). If anything fails, the agent mutates the design and re-tests. The loop repeats until the candidate passes every check — or the iteration budget runs out.
+An LLM agent designs VHH nanobody sequences and immediately evaluates them against a panel of deterministic developability checks. If any check fails, the agent proposes targeted point mutations and re-evaluates. The loop runs until the candidate satisfies all constraints or the iteration budget is exhausted.
 
-Nothing passes without being tested.
+The screening tools are deterministic and sequence-level: no generative inference, no stochastic variation. The agent does the reasoning; the tools do the measurement.
 
 ## The Loop
 
@@ -14,21 +14,17 @@ Nothing passes without being tested.
 GENERATE → SCREEN → CRITIQUE → MUTATE → RE-SCREEN → ... → PASS
 ```
 
-1. Generate — Propose a VHH sequence with CDR loops targeting the binding epitope.
-2. Screen — Run all four deterministic tools against the candidate.
-3. Critique — Diagnose each failure: exact motif, position, mechanism, clinical consequence.
-4. Mutate — Apply point mutations to fix liabilities while preserving binding geometry.
-5. Re-Screen — Re-test from scratch. Repeat until clean.
-
-## Technical Heritage
-
-Zero-shot binding strategy adapted from the [Escalante 180-line approach](https://blog.escalante.bio/180-lines-of-code-to-win-the-in-silico-portion-of-the-adaptyv-nipah-binding-competition/), extended with a developability screening layer.
+1. Generate - Propose a VHH sequence with CDR loops targeting the binding epitope.
+2. Screen - Run all four sequence-level screening tools against the candidate.
+3. Critique - Diagnose each failure: exact motif, position, mechanism, manufacturing consequence.
+4. Mutate - Apply point mutations to fix liabilities while preserving binding geometry.
+5. Re-Screen - Re-test the revised sequence. Repeat until all constraints are met.
 
 ## Screening Tools
 
 ### Liability Scanning (PTM Hotspots)
 
-Deterministic regex — no LLM inference, no stochastic variation.
+Deterministic regex - no LLM inference, no stochastic variation.
 
 | Liability | Motif | Mechanism |
 |---|---|---|
@@ -38,16 +34,18 @@ Deterministic regex — no LLM inference, no stochastic variation.
 
 ### Biophysical Profiling (pI / GRAVY)
 
-- pI < 7.5 → precipitation risk near physiological pH
-- GRAVY > 0.0 → elevated hydrophobicity, aggregation-prone
+- pI < 7.5: precipitation risk near physiological pH
+- GRAVY > 0.0: elevated hydrophobicity, aggregation-prone
 
 ### Aggregation-Prone Region Scanner (APR)
 
-Sliding-window hydrophobicity analysis (7-residue window, Kyte-Doolittle scale) calibrated against 13 clinical-stage VH/VHH domains whose sequences were extracted from public PDB structures and patent filings (3 VHH: Caplacizumab, Ozoralizumab, Envafolimab; 10 mAb VH: Pembrolizumab, Nivolumab, Trastuzumab, Adalimumab, Rituximab, Bevacizumab, Atezolizumab, Durvalumab, Ipilimumab, Crizanlizumab). Patches are scored as z-scores and percentiles against this clinical distribution. A design fails screening only if its worst patch exceeds the 95th percentile (threshold: 1.934 mean KD/residue). Caplacizumab (first approved VHH) validates at the 40.5th percentile.
+Sliding-window hydrophobicity analysis using a 7-residue window on the Kyte-Doolittle scale. Patches are scored as z-scores and percentiles against a pre-computed distribution of max-patch scores from 13 clinical-stage VH/VHH domains (3 VHH: Caplacizumab, Ozoralizumab, Envafolimab; 10 mAb VH: Pembrolizumab, Nivolumab, Trastuzumab, Adalimumab, Rituximab, Bevacizumab, Atezolizumab, Durvalumab, Ipilimumab, Crizanlizumab). Sequences were extracted from public PDB structures and patent filings.
+
+A candidate fails only if its worst patch exceeds the 95th percentile of this clinical distribution (threshold: 1.971 mean KD/residue). The calibration anchors Caplacizumab (first approved VHH, anti-vWF; PDB 7EOW) at the 77th percentile (max patch 1.686 KD/residue), grounding the threshold in empirical manufacturing survival rather than textbook heuristics.
 
 ### VHH Hallmark Audit (FR2 Tetrad)
 
-Checks Kabat positions 37, 44, 45, 47 for camelid vs. human VH identity:
+Checks Kabat positions 37, 44, 45, 47 for camelid vs. human VH identity. These positions distinguish camelid VHH from conventional VH: the camelid tetrad (F/E/R/G) compensates for the absence of VL by providing a hydrophilic interface where conventional VH has a hydrophobic VH-VL contact surface.
 
 | Kabat Position | Camelid | Human VH | Role |
 |---|---|---|---|
@@ -56,93 +54,125 @@ Checks Kabat positions 37, 44, 45, 47 for camelid vs. human VH identity:
 | 45 | R | L | Charged residue replacing hydrophobic VL contact |
 | 47 | G | W | Flexible Gly replacing bulky Trp |
 
+### Structure Prediction (Boltz-2)
+
+Predicts the 3D structure of a VHH-antigen complex using Boltz-2. Returns iptm, ptm, complex_plddt, and per-interface confidence scores. Defaults to Human PD-1 ectodomain as the antigen target.
+
+GPU required for inference (min 8 GB VRAM). Use `dry_run=True` for input validation and YAML generation without running inference - suitable for CI and local testing.
+
+```
+iptm >= 0.8  High confidence binding interface
+iptm >= 0.6  Plausible interface, verify experimentally
+iptm <  0.6  Low confidence, consider redesign
+```
+
+Boltz-2 was chosen over AlphaFold-Multimer for better accuracy on antibody-antigen complexes; MIT license.
+
 ## Architecture
 
 ```
 agent_loop.py                    biologics_server.py
-┌─────────────────────┐          ┌──────────────────────────────┐
-│  LLM Agent          │  import  │  Screening Tools             │
-│  (DeepSeek V3 /     │────────→ │                              │
-│   Together AI)      │          │ scan_structural_liabilities  │
-│                     │          │ calculate_biophysical_profile│
-│  Generate → Screen  │←──────── │ vhh_hallmark_audit           │
-│  → Critique → Mutate│  JSON    │ scan_aggregation_patches     │
-└─────────────────────┘          └──────────────────────────────┘
-        │
-        ▼
-  logs/agent_cot.log
+┌─────────────────────┐          ┌──────────────────────────────────────┐
+│  LLM Agent          │  import  │  Screening Tools                     │
+│  (DeepSeek V3 /     │────────→ │                                      │
+│   Together AI)      │          │  scan_structural_liabilities         │
+│                     │          │  calculate_biophysical_profile       │
+│  Generate → Screen  │←──────── │  vhh_hallmark_audit                  │
+│  → Critique → Mutate│  JSON    │  scan_aggregation_patches            │
+└─────────────────────┘          │  predict_vhh_complex_structure (GPU) │
+        │                        └──────────────────────────────────────┘
+        ▼                                        │
+  logs/agent_cot.log                     tools/boltz2_structure.py
 ```
 
 Two usage modes:
 
-- **Automated** — `python agent_loop.py` imports the tools directly and runs the full generate → screen → mutate loop unattended.
-- **Interactive** — register `biologics_server.py` as an MCP server in Claude Code, then call the tools on demand during a conversation.
-
-- `biologics_server.py` — Four deterministic screening tools, structured JSON output. Runnable as a standalone FastMCP server or importable as a Python module.
-- `agent_loop.py` — Automated screening loop via OpenAI-compatible API. Per-iteration cost tracking. Green CoT terminal output, logged to `logs/agent_cot.log`.
+- Automated - `python agent_loop.py` runs the full generate-screen-mutate loop unattended via OpenAI-compatible API.
+- Interactive - register `biologics_server.py` as an MCP server in Claude Code, then call the tools on demand during a conversation.
 
 ### Developability Dashboard
 
 ![Developability Optimization Dashboard](assets/biophysical_trajectory.png)
 
-The dashboard is generated automatically at the end of each run, tracking all four developability metrics across iterations.
+Four-panel dashboard generated automatically at the end of each run. Tracks pI, GRAVY, liability count, and APR percentile across iterations. Points labeled "NA" were imputed by carry-forward when the agent skipped a tool on a given iteration.
 
 ## Quickstart
 
 ```bash
 git clone https://github.com/ChristopherSNelson/VHH-Screener.git
 cd VHH-Screener
-pip install fastmcp biopython openai
+pip install -e ".[dev]"
 export TOGETHER_API_KEY="your-key-here"
-python agent_loop.py
+python agent_loop.py --seed naive
 ```
 
-| Environment Variable | Default | Description |
+Seed options:
+
+| `--seed` | Description |
+|---|---|
+| `naive` (default) | Deliberately bad starting sequence - 7 liabilities, low pI, APR 100th percentile. Maximizes the red-to-green arc in the dashboard. |
+| `pembrolizumab` | Pembrolizumab heavy chain VH - real clinical sequence, humanized FR2. |
+| `none` | Zero-shot: agent designs from scratch without a seed. |
+
+Environment variables:
+
+| Variable | Default | Description |
 |---|---|---|
 | `TOGETHER_API_KEY` | *(required)* | Together AI API key |
-| `MODEL_ID` | `deepseek-ai/DeepSeek-V3` | Any OpenAI-compatible model on Together |
+| `MODEL_ID` | `deepseek-ai/DeepSeek-V3` | Any OpenAI-compatible model on Together AI |
+
+See `examples/example_run.log` for a complete captured run (6 iterations, all PASS, $0.0077).
 
 ## Developability Constraints
 
-Hard requirements. Nothing passes unless all are satisfied.
+Hard requirements. A candidate does not pass unless all are satisfied.
 
 | Constraint | Threshold | Rationale |
 |---|---|---|
 | Isoelectric point | pI > 7.5 | Avoid precipitation near physiological pH |
 | Hydropathy | GRAVY <= 0.0 | Minimize aggregation propensity |
 | Aggregation-prone regions | Below 95th percentile of CSTs | Clinically-calibrated patch detection |
-| Deamidation motifs | Zero in CDRs | Eliminate shelf-life degradation risk |
-| Isomerization motifs | Zero in CDRs | Prevent charge heterogeneity |
-| N-Glycosylation sequons | Zero in CDRs | Ensure batch consistency |
+| Deamidation motifs | Zero detected | Eliminate shelf-life degradation risk |
+| Isomerization motifs | Zero detected | Prevent charge heterogeneity |
+| N-glycosylation sequons | Zero detected | Ensure batch consistency |
 | FR2 hallmark tetrad | Assessed and documented | Structural integrity of VHH scaffold |
 
-### References
+Note: liability scanning covers the full sequence. CDR-specific masking (to distinguish framework from CDR liabilities) is a planned extension.
 
-APR calibration set: VH/VHH sequences from public PDB structures and patent filings for 13 approved/clinical-stage therapeutics.
+## Tests
+
+```bash
+pip install -e ".[dev]"
+python -m pytest tests/ -q
+```
+
+69 tests covering four sequence-level screening tools and the Boltz-2 structure predictor. Regression anchors use Caplacizumab (PDB 7EOW, first approved VHH) and Pembrolizumab VH with verified expected values. Boltz-2 tests use `dry_run=True` - no GPU or model weights required.
+
+## Technical Heritage
+
+Zero-shot binding strategy adapted from the [Escalante 180-line approach](https://blog.escalante.bio/180-lines-of-code-to-win-the-in-silico-portion-of-the-adaptyv-nipah-binding-competition/), which won the in-silico portion of the Adaptyv Nipah binding competition. That work demonstrated that structured zero-shot prompting with a clear binding epitope can produce credible VHH designs without fine-tuning or MSA inputs. VHH-Screener extends that baseline with a deterministic developability filter applied at every iteration, ensuring designs are optimized for manufacturability alongside binding plausibility.
 
 ## Roadmap
 
-Currently sequence-level heuristics only. Planned extensions:
+Current tools are sequence-level. Planned extensions:
 
-### 1. Structural Screening
+### 1. SASA-Aware Liabilities
 
-- **SASA-aware liabilities** via FreeSASA — only flag surface-exposed PTM motifs (SASA > 25 A^2), stop rejecting buried residues that are fine
-- **Boltz-2** for VHH-antigen complex prediction — binding energy, interface RMSD, CDR3 loop geometry. Chosen over AlphaFold-Multimer for better antibody-antigen docking accuracy; MIT license, supports protein + nucleic acid + small molecule inputs
+FreeSASA integration to filter PTM hotspots by solvent accessibility (SASA > 25 A^2). Buried residues are rarely modified in practice; flagging them produces false positives that waste agent iterations.
 
-### 2. Better Developability Scoring
+### 2. Inverse Folding
 
-- **SAP mapping** instead of global GRAVY — spatially-resolved hydrophobic patches on solvent-exposed surface, aligned with TDC/TAP benchmarks
-- **AntiFold** for inverse folding — CDR sequence optimization conditioned on 3D scaffold coordinates, replacing stochastic mutation. Purpose-built for antibodies with better CDR sequence recovery than ProteinMPNN
+AntiFold for CDR sequence optimization conditioned on 3D scaffold coordinates. Purpose-built for antibodies with better CDR sequence recovery than ProteinMPNN. Requires Boltz-2 structure prediction as a prerequisite.
 
 ### 3. Immunogenicity
 
-- **BigMHC** for MHC presentation prediction — trained on mass-spec data (peptides actually presented on cell surface), not just binding affinity like NetMHCpan
-- **AbLang2/AntiBERTa2** for OAS-perplexity scoring — log-likelihood of VHH sequence against Observed Antibody Space. Antibody-specific language models calibrated on repertoire data, unlike general protein models (ESM-2). High perplexity = immunogenicity risk
+- AbLang2 / AntiBERTa2 for OAS-perplexity scoring - log-likelihood of the VHH sequence against Observed Antibody Space. High perplexity signals immunogenicity risk. Antibody-specific language models; more accurate than general protein models (ESM-2) for this task.
+- BigMHC for MHC presentation prediction - trained on mass-spec data (peptides actually presented on cell surface), not binding affinity proxies like NetMHCpan.
 
 ### 4. Search Strategy
 
-- **MCTS-based mutation exploration** instead of linear loop — explore parallel mutation branches, prune early failures
-- **Generator vs. Screener adversarial debate** — Generator tries to exploit gaps in deterministic rules, driving more robust designs
+- MCTS-based mutation exploration instead of linear iteration - explore parallel mutation branches, prune early failures, avoid local optima.
+- Multi-agent Generator vs. Screener adversarial debate - Generator proposes designs that exploit gaps in deterministic rules, driving more robust screening criteria.
 
 ## License
 

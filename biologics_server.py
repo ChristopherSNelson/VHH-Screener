@@ -380,7 +380,7 @@ _APR_WINDOW_SIZE = 7
 # domains. Used to derive the reference distribution for z-score calculation.
 
 _CST_MAX_PATCH_SCORES: dict[str, float] = {
-    "Caplacizumab_VHH": 1.357,
+    "Caplacizumab_VHH": 1.686,  # PDB 7EOW chain B (verified crystal structure)
     "Ozoralizumab_VHH": 2.086,
     "Envafolimab_VHH": 1.371,
     "Pembrolizumab_VH": 1.029,
@@ -396,15 +396,15 @@ _CST_MAX_PATCH_SCORES: dict[str, float] = {
 }
 
 # Distribution statistics (7-residue KD window, n=13 clinical-stage therapeutics)
-_CST_MEAN = 1.431  # mean of max-patch scores
-_CST_STD = 0.306  # sample standard deviation
+_CST_MEAN = 1.456  # mean of max-patch scores
+_CST_STD = 0.313  # sample standard deviation
 _CST_N = 13
 
 # Screening threshold: 95th percentile (parametric, one-tailed)
 _APR_SCREENING_THRESHOLD = round(_CST_MEAN + 1.645 * _CST_STD, 3)  # ~1.934
 
-# Gold standard: Caplacizumab (first approved VHH, anti-vWF)
-_CAPLACIZUMAB_MAX_PATCH = 1.357
+# Gold standard: Caplacizumab (first approved VHH, anti-vWF; PDB 7EOW)
+_CAPLACIZUMAB_MAX_PATCH = 1.686
 
 
 def _compute_patch_z_score(max_patch_kd: float) -> float:

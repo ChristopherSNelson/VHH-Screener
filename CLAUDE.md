@@ -241,6 +241,14 @@ Then start fresh. Claude reads `CLAUDE.md` + `HANDOFF.md` on startup and picks u
 
 ## Mistakes log
 
+### Never derive biological sequences manually
+When fixing or sourcing a protein sequence (UniProt, PDB chain, etc.), always download the
+FASTA directly from the API (`curl https://rest.uniprot.org/uniprotkb/Q15116.fasta` or
+`curl https://www.rcsb.org/fasta/entry/7EOW/download`) and grep/extract from the result.
+Do not derive sequences by counting characters in existing code or reconstructing from
+memory. LLMs have poor sequence fidelity - a manually derived "fix" can silently preserve
+the original bug in different positions.
+
 <!-- Add entries here as they happen. Format: date, what went wrong, rule added. -->
 <!-- Example:
 - 2026-03-07: Claude used hg19 coordinates with an hg38 reference. Rule: always confirm genome build before writing pipeline code.

@@ -22,7 +22,7 @@ Ship tests, packaging, validation, and example log. All local, no API keys, no G
 
 ### Test sequences to use
 
-**Caplacizumab VHH** (PDB: 1KXV chain A, first approved VHH):
+**Caplacizumab VHH** (PDB: 7EOW chain B, first approved VHH):
 ```
 QVQLQESGGGLVQAGGSLRLSCAASGRTFSSYNMGWFRQAPGKEREFVSAISWSGGSTYYADSVKGRFTISRDNAKNTVYLQMNSLKPEDTAVYYCAAAGVRAEDGRVRTLPSEYTFWGQGTQVTVSS
 ```
@@ -163,7 +163,7 @@ The 13 sequences must be defined. They are NOT currently in the codebase - only 
 
 **Critical**: The actual amino acid sequences for the 13 CSTs must be sourced. Approach:
 - Hard-code them in a `data/cst_sequences.py` or `data/cst_sequences.json` file
-- Sources: PDB (1KXV for Caplacizumab, 5DK3 for Pembrolizumab, etc.)
+- Sources: PDB (7EOW for Caplacizumab, 5DK3 for Pembrolizumab, etc.)
 - Only the VH/VHH domain, not full heavy chain
 
 ### Notebook structure

@@ -248,9 +248,9 @@ class TestVhhHallmarkAudit:
             assert key in result
 
     def test_caplacizumab_chimeric(self, caplacizumab_seq):
-        # Caplacizumab has F37/E44/R45 camelid but F at Kabat 47 (not G)
+        # Caplacizumab (7EOW): F37/R45 camelid, G44 human, L47 neither → 2/4
         result = parse(vhh_hallmark_audit(caplacizumab_seq))
-        assert result["camelid_hallmark_count"] == 3
+        assert result["camelid_hallmark_count"] == 2
         assert "Chimeric" in result["identity"]
 
 
@@ -312,9 +312,9 @@ class TestScanAggregationPatches:
 
     def test_calibration_constants_correct(self):
         # Smoke test: verify the hardcoded calibration constants are sane
-        assert _APR_SCREENING_THRESHOLD == pytest.approx(1.934, abs=0.01)
-        assert _CAPLACIZUMAB_MAX_PATCH == pytest.approx(1.357, abs=0.001)
-        assert _CST_MEAN == pytest.approx(1.431, abs=0.01)
+        assert _APR_SCREENING_THRESHOLD == pytest.approx(1.971, abs=0.01)
+        assert _CAPLACIZUMAB_MAX_PATCH == pytest.approx(1.686, abs=0.001)
+        assert _CST_MEAN == pytest.approx(1.456, abs=0.01)
         assert _CST_STD > 0
 
     def test_z_score_direction(self):

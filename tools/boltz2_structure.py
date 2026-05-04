@@ -34,12 +34,13 @@ from typing import Any
 # Standard 20 amino acids accepted by Boltz-2
 _VALID_AAS = set("ACDEFGHIKLMNPQRSTVWY")
 
-# Human PD-1 ectodomain (Uniprot Q15116, residues 33-150)
+# Human PD-1 ectodomain (PDB 4ZQK chain B; 118 AA)
+# Extracellular IgV-like domain used in co-crystal structures with PD-L1.
+# Contains the C93S engineering mutation common in PD-1 expression constructs.
 # Used as the default antigen target for PD-1/VHH complex prediction.
 PD1_ECTODOMAIN = (
-    "LDSPDRPWNPPTFSPALLVVTEGDNATFTCSFSNTSESFVLNWYRMSPSNQTDKLAAFPEDRSQPGQDS"
-    "RFRGLPKPIQFLSGTVIGLVSLATFLICFHWFHLQKNEGQDLRVTQGKEDVLSSEKDIKHFMSRQGPEL"
-    "HVSYGRMFMQLTGLECGSQNLRLSQEELRKVPQAMERSQGPLPYLQTPN"
+    "NPPTFSPALLVVTEGDNATFTCSFSNTSESFVLNWYRMSPSNQTDKLAAFPEDRSQPGQDS"
+    "RFRVTQLPNGRDFHMSVVRARRNDSGTYLCGAISLAPKAQIKESLRAELRVTERRAE"
 )
 
 

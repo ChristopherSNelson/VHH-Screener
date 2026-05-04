@@ -471,7 +471,7 @@ def _plot_biophysical_trajectory(
     apr_pcts = [p.get("apr_percentile", 0) for p in points]
     colors_apr = ["#00ff41" if pct < 95 else "#ff3333" for pct in apr_pcts]
     ax4.axhline(95, color="#ff3333", linewidth=1, linestyle="--", alpha=0.4)
-    ax4.axhline(40.5, color="#00aaff", linewidth=1, linestyle=":", alpha=0.3)
+    ax4.axhline(76.9, color="#00aaff", linewidth=1, linestyle=":", alpha=0.3)
     ax4.axhspan(95, 100, alpha=0.06, color="#ff3333", zorder=0)
     ax4.plot(iters, apr_pcts, color="#555555", linewidth=1.5, zorder=1)
     ax4.scatter(
@@ -515,7 +515,7 @@ def _plot_biophysical_trajectory(
     )
     ax4.text(
         max(iters),
-        40.5,
+        76.9,
         " Caplacizumab",
         color="#00aaff",
         fontsize=7,

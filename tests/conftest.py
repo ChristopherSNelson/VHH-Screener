@@ -15,12 +15,14 @@ import pytest
 
 @pytest.fixture
 def caplacizumab_seq() -> str:
-    # Caplacizumab VHH domain - first approved nanobody therapeutic
-    # biophysics: pI=9.01 PASS, GRAVY=-0.41 PASS
-    # APR: max_patch=1.543, 64.4th percentile, PASS
+    # Caplacizumab VHH domain - first approved nanobody therapeutic (anti-vWF)
+    # Source: PDB 7EOW chain B (crystal structure with vWF A1 domain), His-tag removed
+    # biophysics: pI=9.07 PASS, GRAVY=-0.349 PASS
+    # APR: max_patch=1.686, ~77th percentile, PASS
+    # FR2 tetrad: F37/G44/R45/L47 → 2/4 camelid hallmarks (Chimeric)
     return (
-        "QVQLQESGGGLVQAGGSLRLSCAASGRTFSSYNMGWFRQAPGKEREFVSAISWSGGSTYYADSVKG"
-        "RFTISRDNAKNTVYLQMNSLKPEDTAVYYCAAAGVRAEDGRVRTLPSEYTFWGQGTQVTVSS"
+        "EVQLVESGGGLVQPGGSLRLSCAASGRTFSYNPMGWFRQAPGKGRELVAAISRTGGSTYY"
+        "PDSVEGRFTISRDNAKRMVYLQMNSLRAEDTAVYYCAAAGVRAEDGRVRTLPSEYTFWGQGTQVTVSS"
     )
 
 
