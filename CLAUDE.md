@@ -249,6 +249,19 @@ Do not derive sequences by counting characters in existing code or reconstructin
 memory. LLMs have poor sequence fidelity - a manually derived "fix" can silently preserve
 the original bug in different positions.
 
+### Always verify pass/fail logic against actual tool response fields
+Before using `result["nested"]["field"]` for pass/fail, confirm the field actually exists
+in the tool's JSON response. Defaulting to `False` when a key is missing silently causes
+every run to fail. Use a direct numeric comparison (e.g. `percentile < 95.0`) instead of
+relying on a `passed` flag that may not be populated.
+
+### Do not use `tool_choice="required"` for agentic design loops
+With `tool_choice="required"`, the LLM jumps directly to making tool calls without a
+reasoning step. For generate-and-screen loops (propose sequence → screen → critique →
+mutate), use a text-only API call first (no `tools=` arg) so the model can reason and
+write a new sequence. Then run screening functions locally. This prevents the "same sequence
+every iteration" failure mode where the model re-screens without mutating.
+
 <!-- Add entries here as they happen. Format: date, what went wrong, rule added. -->
 <!-- Example:
 - 2026-03-07: Claude used hg19 coordinates with an hg38 reference. Rule: always confirm genome build before writing pipeline code.
