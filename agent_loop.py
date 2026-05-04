@@ -317,6 +317,7 @@ PEMBROLIZUMAB_VH_SEED = (
 # Main screening loop
 # ---------------------------------------------------------------------------
 MAX_ITERATIONS = 10  # Safety cap to prevent runaway loops
+MAX_TOKENS = 8192  # Per-iteration output budget; doubled automatically on length failures
 
 
 PLOT_DIR = Path(__file__).parent / "assets"
@@ -647,14 +648,23 @@ def run_screening_loop(
     for iteration in range(1, MAX_ITERATIONS + 1):
         header_print(f"ITERATION {iteration}")
 
-        # Call model with tools
-        response = client.chat.completions.create(
-            model=model_id,
-            max_tokens=4096,
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
-        )
+        # Call model with tools; double max_tokens on length failures (up to 3 doublings)
+        _max_tokens = MAX_TOKENS
+        for _attempt in range(4):
+            response = client.chat.completions.create(
+                model=model_id,
+                max_tokens=_max_tokens,
+                messages=messages,
+                tools=TOOLS,
+                tool_choice="auto",
+            )
+            if response.choices[0].finish_reason != "length":
+                break
+            warn_print(
+                f"[Warning] finish_reason=length at max_tokens={_max_tokens}. "
+                f"Doubling to {_max_tokens * 2}."
+            )
+            _max_tokens *= 2
 
         choice = response.choices[0]
         finish_reason = choice.finish_reason
