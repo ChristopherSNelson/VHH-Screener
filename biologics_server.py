@@ -22,6 +22,7 @@ import logging
 import re
 from pathlib import Path
 
+from Bio.PDB import PDBParser
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from fastmcp import FastMCP
 
@@ -548,6 +549,167 @@ def scan_aggregation_patches(
 
     result = json.dumps(report, indent=2)
     logger.info("scan_aggregation_patches | %s", result)
+    return result
+
+
+@mcp.tool()
+def filter_liabilities_by_sasa(
+    pdb_path: str,
+    sasa_threshold: float = 25.0,
+    chain_id: str | None = None,
+) -> str:
+    """Filter PTM liabilities by solvent-accessible surface area (SASA).
+
+    Loads a PDB structure, computes per-residue SASA with FreeSASA, then
+    re-runs scan_structural_liabilities on the extracted chain sequence and
+    filters to only those motifs where at least one residue has SASA above
+    the threshold. Buried motifs (SASA < 25 Å²) are rarely modified in
+    practice and generate false positives that waste agent iterations.
+
+    Designed to be called after predict_vhh_complex_structure has produced
+    a PDB file. CPU-only; no GPU required.
+
+    Args:
+        pdb_path: Path to a PDB file.
+        sasa_threshold: Minimum per-residue SASA (Å²) to consider a residue
+            exposed. Default 25.0 Å² (standard developability threshold).
+        chain_id: PDB chain to analyse. If None, uses the first chain found.
+
+    Returns:
+        JSON string with fields:
+            chain_id: str — chain analysed
+            sequence: str — sequence extracted from that chain
+            sasa_threshold: float
+            total_liabilities: int — all motifs found in sequence
+            exposed_liabilities: int — motifs with at least one exposed residue
+            buried_liabilities: int — motifs fully buried (filtered out)
+            exposed: list of liability dicts (same schema as scan_structural_liabilities)
+                     each with an added sasa_values field (per-residue SASA in Å²)
+            buried: list of fully buried liability dicts
+    """
+    try:
+        import freesasa
+    except ImportError:
+        return json.dumps(
+            {"error": "freesasa not installed. Run: conda install -c conda-forge freesasa"}
+        )
+
+    pdb_file = Path(pdb_path)
+    if not pdb_file.exists():
+        return json.dumps({"error": f"PDB file not found: {pdb_path}"})
+
+    # --- Parse PDB and pick chain ---
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure("vhh", str(pdb_file))
+    model = next(structure.get_models())
+
+    chains = list(model.get_chains())
+    if not chains:
+        return json.dumps({"error": "No chains found in PDB file."})
+
+    if chain_id is not None:
+        chain = model[chain_id] if chain_id in model else None
+        if chain is None:
+            available = [c.id for c in chains]
+            return json.dumps({"error": f"Chain '{chain_id}' not found. Available: {available}"})
+    else:
+        chain = chains[0]
+        chain_id = chain.id
+
+    # --- Extract sequence and build residue index map ---
+    # Only standard amino acids; skip HETATMs and waters.
+    _aa3 = {
+        "ALA": "A",
+        "ARG": "R",
+        "ASN": "N",
+        "ASP": "D",
+        "CYS": "C",
+        "GLN": "Q",
+        "GLU": "E",
+        "GLY": "G",
+        "HIS": "H",
+        "ILE": "I",
+        "LEU": "L",
+        "LYS": "K",
+        "MET": "M",
+        "PHE": "F",
+        "PRO": "P",
+        "SER": "S",
+        "THR": "T",
+        "TRP": "W",
+        "TYR": "Y",
+        "VAL": "V",
+    }
+    residues = [r for r in chain.get_residues() if r.get_resname().strip() in _aa3]
+    if not residues:
+        return json.dumps({"error": f"No standard amino-acid residues found in chain {chain_id}."})
+
+    sequence = "".join(_aa3[r.get_resname().strip()] for r in residues)
+    # Map 1-based sequence position → BioPython residue object
+    pos_to_residue: dict[int, object] = {i + 1: r for i, r in enumerate(residues)}
+
+    # --- Compute SASA with FreeSASA ---
+    freesasa.setVerbosity(freesasa.silent)
+    try:
+        sasa_result, _classes = freesasa.calcBioPDB(structure)
+        residue_areas = sasa_result.residueAreas()
+    except Exception as exc:
+        return json.dumps({"error": f"FreeSASA calculation failed: {exc}"})
+
+    def _residue_sasa(res) -> float:
+        """Return total SASA for a BioPython Residue."""
+        chain_key = res.get_parent().id
+        res_id = res.get_id()
+        # res_id is (hetflag, seqnum, icode); FreeSASA keys are str(seqnum) + icode.strip()
+        res_key = str(res_id[1]) + res_id[2].strip()
+        try:
+            return residue_areas[chain_key][res_key].total
+        except (KeyError, AttributeError):
+            return 0.0
+
+    # --- Re-run liability scan on extracted sequence ---
+    liabilities_raw = json.loads(scan_structural_liabilities(sequence))
+    if "error" in liabilities_raw:
+        return json.dumps({"error": f"Liability scan failed: {liabilities_raw['error']}"})
+
+    # --- Classify each liability as exposed or buried ---
+    exposed: list[dict] = []
+    buried: list[dict] = []
+
+    for liability in liabilities_raw.get("liabilities", []):
+        start_pos: int = liability["position"]  # 1-based, start of motif
+        motif: str = liability["motif"]
+        motif_len = len(motif)
+
+        sasa_values: dict[int, float] = {}
+        for offset in range(motif_len):
+            seq_pos = start_pos + offset
+            res = pos_to_residue.get(seq_pos)
+            sasa_values[seq_pos] = round(_residue_sasa(res), 2) if res is not None else 0.0
+
+        max_sasa = max(sasa_values.values()) if sasa_values else 0.0
+        is_exposed = max_sasa >= sasa_threshold
+
+        entry = {**liability, "sasa_values": sasa_values, "max_sasa": round(max_sasa, 2)}
+        (exposed if is_exposed else buried).append(entry)
+
+    report = {
+        "chain_id": chain_id,
+        "sequence": sequence,
+        "sasa_threshold": sasa_threshold,
+        "total_liabilities": len(liabilities_raw.get("liabilities", [])),
+        "exposed_liabilities": len(exposed),
+        "buried_liabilities": len(buried),
+        "exposed": exposed,
+        "buried": buried,
+    }
+    result = json.dumps(report, indent=2)
+    logger.info(
+        "filter_liabilities_by_sasa | chain=%s exposed=%d buried=%d",
+        chain_id,
+        len(exposed),
+        len(buried),
+    )
     return result
 
 

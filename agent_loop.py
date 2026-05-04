@@ -122,120 +122,113 @@ def warn_print(msg: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tool definitions — OpenAI function-calling format
+# Tool registry — single source of truth for all agent tools.
+# TOOLS and TOOL_DISPATCH are derived automatically; add new tools here only.
 # ---------------------------------------------------------------------------
+TOOL_REGISTRY: list[dict] = [
+    {
+        "name": "scan_structural_liabilities",
+        "description": (
+            "Scan a protein sequence for post-translational modification "
+            "hotspots: Deamidation (NG/NS/NA), Isomerization (DG), and "
+            "N-glycosylation (N-X-S/T). Returns JSON with liabilities list, "
+            "count, and overall PASS/FAIL flag."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sequence": {
+                    "type": "string",
+                    "description": "Single-letter amino-acid sequence.",
+                },
+            },
+            "required": ["sequence"],
+        },
+        "fn": lambda args: scan_structural_liabilities(args["sequence"]),
+    },
+    {
+        "name": "calculate_biophysical_profile",
+        "description": (
+            "Calculate isoelectric point (pI) and GRAVY hydropathy score "
+            "for a protein sequence. Flags aggregation risk: pI < 7.5 = FAIL, "
+            "GRAVY > 0.0 = FAIL. Returns structured JSON."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sequence": {
+                    "type": "string",
+                    "description": "Single-letter amino-acid sequence.",
+                },
+            },
+            "required": ["sequence"],
+        },
+        "fn": lambda args: calculate_biophysical_profile(args["sequence"]),
+    },
+    {
+        "name": "vhh_hallmark_audit",
+        "description": (
+            "Audit FR2 hallmark positions (Kabat 37, 44, 45, 47) for "
+            "camelid vs. human VH identity. Returns per-position audit "
+            "with humanization suggestions and warnings."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sequence": {
+                    "type": "string",
+                    "description": "Single-letter amino-acid VHH sequence.",
+                },
+                "framework2_start": {
+                    "type": "integer",
+                    "description": "0-based index where FR2 begins. Default 36.",
+                },
+            },
+            "required": ["sequence"],
+        },
+        "fn": lambda args: vhh_hallmark_audit(args["sequence"], args.get("framework2_start", 36)),
+    },
+    {
+        "name": "scan_aggregation_patches",
+        "description": (
+            "Scan for aggregation-prone regions (APRs) using clinically-"
+            "calibrated sliding-window hydrophobicity. Each 7-residue "
+            "window is scored against a reference distribution of 13 "
+            "clinical-stage VH/VHH domains. Returns z-scores, percentiles, "
+            "Caplacizumab comparison, and PASS/FAIL against the 95th "
+            "percentile screening threshold."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sequence": {
+                    "type": "string",
+                    "description": "Single-letter amino-acid sequence.",
+                },
+                "window_size": {
+                    "type": "integer",
+                    "description": "Sliding window width (default 7).",
+                },
+            },
+            "required": ["sequence"],
+        },
+        "fn": lambda args: scan_aggregation_patches(args["sequence"], args.get("window_size", 7)),
+    },
+]
+
+# Derived from TOOL_REGISTRY — do not edit directly
 TOOLS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "scan_structural_liabilities",
-            "description": (
-                "Scan a protein sequence for post-translational modification "
-                "hotspots: Deamidation (NG/NS/NA), Isomerization (DG), and "
-                "N-glycosylation (N-X-S/T). Returns JSON with liabilities list, "
-                "count, and overall PASS/FAIL flag."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "sequence": {
-                        "type": "string",
-                        "description": "Single-letter amino-acid sequence.",
-                    }
-                },
-                "required": ["sequence"],
-            },
+            "name": t["name"],
+            "description": t["description"],
+            "parameters": t["parameters"],
         },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "calculate_biophysical_profile",
-            "description": (
-                "Calculate isoelectric point (pI) and GRAVY hydropathy score "
-                "for a protein sequence. Flags aggregation risk: pI < 7.5 = FAIL, "
-                "GRAVY > 0.0 = FAIL. Returns structured JSON."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "sequence": {
-                        "type": "string",
-                        "description": "Single-letter amino-acid sequence.",
-                    }
-                },
-                "required": ["sequence"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "vhh_hallmark_audit",
-            "description": (
-                "Audit FR2 hallmark positions (Kabat 37, 44, 45, 47) for "
-                "camelid vs. human VH identity. Returns per-position audit "
-                "with humanization suggestions and warnings."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "sequence": {
-                        "type": "string",
-                        "description": "Single-letter amino-acid VHH sequence.",
-                    },
-                    "framework2_start": {
-                        "type": "integer",
-                        "description": "0-based index where FR2 begins. Default 36.",
-                    },
-                },
-                "required": ["sequence"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "scan_aggregation_patches",
-            "description": (
-                "Scan for aggregation-prone regions (APRs) using clinically-"
-                "calibrated sliding-window hydrophobicity. Each 7-residue "
-                "window is scored against a reference distribution of 13 "
-                "clinical-stage VH/VHH domains. Returns z-scores, percentiles, "
-                "Caplacizumab comparison, and PASS/FAIL against the 95th "
-                "percentile screening threshold."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "sequence": {
-                        "type": "string",
-                        "description": "Single-letter amino-acid sequence.",
-                    },
-                    "window_size": {
-                        "type": "integer",
-                        "description": "Sliding window width (default 7).",
-                    },
-                },
-                "required": ["sequence"],
-            },
-        },
-    },
+    }
+    for t in TOOL_REGISTRY
 ]
-
-# ---------------------------------------------------------------------------
-# Local tool dispatcher — calls the deterministic functions directly
-# ---------------------------------------------------------------------------
-TOOL_DISPATCH: dict[str, callable] = {
-    "scan_structural_liabilities": lambda args: scan_structural_liabilities(args["sequence"]),
-    "calculate_biophysical_profile": lambda args: calculate_biophysical_profile(args["sequence"]),
-    "vhh_hallmark_audit": lambda args: vhh_hallmark_audit(
-        args["sequence"], args.get("framework2_start", 36)
-    ),
-    "scan_aggregation_patches": lambda args: scan_aggregation_patches(
-        args["sequence"], args.get("window_size", 7)
-    ),
-}
+TOOL_DISPATCH: dict[str, callable] = {t["name"]: t["fn"] for t in TOOL_REGISTRY}
 
 
 def execute_tool(name: str, input_args: dict) -> str:

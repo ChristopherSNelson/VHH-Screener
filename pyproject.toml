@@ -13,6 +13,7 @@ dependencies = [
     "biopython>=1.83",
     "boltz>=2.2.0",
     "fastmcp>=0.1.0",
+    "freesasa>=2.2",
     "openai>=1.0.0",
     "matplotlib>=3.8.0",
 ]
