@@ -318,6 +318,7 @@ PEMBROLIZUMAB_VH_SEED = (
 # ---------------------------------------------------------------------------
 MAX_ITERATIONS = 10  # Safety cap to prevent runaway loops
 MAX_TOKENS = 8192  # Per-iteration output budget; doubled automatically on length failures
+CONTEXT_KEEP_MESSAGES = 20  # Keep system + user prompt + last ~3 full iterations of history
 
 
 PLOT_DIR = Path(__file__).parent / "assets"
@@ -644,19 +645,32 @@ def run_screening_loop(
     iteration = 0
     final_seq: str | None = None
     hit_limit = False
+    _all_passed = False  # set True when all constraints satisfied; unlocks tool_choice="auto"
 
     for iteration in range(1, MAX_ITERATIONS + 1):
         header_print(f"ITERATION {iteration}")
 
-        # Call model with tools; double max_tokens on length failures (up to 3 doublings)
+        # Fix 4: truncate message history — keep system prompt + user prompt + last N messages
+        if len(messages) > CONTEXT_KEEP_MESSAGES + 2:
+            messages = messages[:2] + messages[-CONTEXT_KEEP_MESSAGES:]
+            cot_print(f"[Context] Truncated history to {len(messages)} messages.")
+
+        # Fix 1: tool_choice="required" forces tool calls every iteration, preventing
+        # the "agent just talks" failure mode. Switches to "auto" only once all
+        # constraints are satisfied so the agent can deliver its final report.
+        _tool_choice = "auto" if _all_passed else "required"
+
+        # Fix 2: temperature=0 for reproducible benchmark results.
+        # Fix: double max_tokens on length failures (up to 3 doublings).
         _max_tokens = MAX_TOKENS
         for _attempt in range(4):
             response = client.chat.completions.create(
                 model=model_id,
                 max_tokens=_max_tokens,
+                temperature=0,
                 messages=messages,
                 tools=TOOLS,
-                tool_choice="auto",
+                tool_choice=_tool_choice,
             )
             if response.choices[0].finish_reason != "length":
                 break
@@ -771,6 +785,41 @@ def run_screening_loop(
                 ap = json.loads(scan_aggregation_patches(last_seq))
                 if "error" not in ap:
                     m["apr_percentile"] = ap["candidate_max_patch"]["percentile"]
+
+            # Fix 3: inject partial scoring status so agent has explicit gradient.
+            pi = m.get("pI")
+            gravy = m.get("gravy")
+            liab = m.get("liability_count")
+            apr = m.get("apr_percentile")
+
+            pi_ok = pi is not None and pi > 7.5
+            gravy_ok = gravy is not None and gravy <= 0.0
+            liab_ok = liab is not None and liab == 0
+            apr_ok = apr is not None and apr < 95.0
+
+            score = sum([pi_ok, gravy_ok, liab_ok, apr_ok])
+            _all_passed = score == 4
+
+            def _flag(ok: bool) -> str:
+                return "✓" if ok else "✗"
+
+            status_parts = [
+                f"pI={pi:.2f}{_flag(pi_ok)}" if pi is not None else "pI=?",
+                f"GRAVY={gravy:.3f}{_flag(gravy_ok)}" if gravy is not None else "GRAVY=?",
+                f"liabilities={liab}{_flag(liab_ok)}" if liab is not None else "liab=?",
+                f"APR={apr:.0f}th%ile{_flag(apr_ok)}" if apr is not None else "APR=?",
+            ]
+            status_line = (
+                f"[Screener] Iter {iteration}: {score}/4 passing — "
+                + "  |  ".join(status_parts)
+                + (
+                    " — ALL CONSTRAINTS SATISFIED. Provide your final sequence and report."
+                    if _all_passed
+                    else f" — {4 - score} constraint(s) remaining."
+                )
+            )
+            cot_print(status_line)
+            messages.append({"role": "user", "content": status_line})
 
     else:
         hit_limit = True
