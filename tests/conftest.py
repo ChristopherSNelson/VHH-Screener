@@ -3,7 +3,7 @@ Shared fixtures for VHH-Screener test suite.
 
 Sequences:
 - Caplacizumab: first approved VHH therapeutic (anti-vWF)
-- Pembrolizumab VH: from agent_loop.py PEMBROLIZUMAB_VH_SEED (PDB 5DK3)
+- Pembrolizumab VH: from agent_loop.py PEMBROLIZUMAB_VH_SEED (PDB 5DK3, chain B, VH domain residues 1-120; verified sequence match)
 - Naive seed: from agent_loop.py NAIVE_SEED (deliberately bad, 7 liabilities)
 - Synthetic camelid/humanized: constructed to have known FR2 hallmark residues
 """

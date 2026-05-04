@@ -30,6 +30,7 @@ import logging
 import os
 import subprocess
 import sys
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -77,6 +78,29 @@ RESET = "\033[0m"
 BOLD = "\033[1m"
 CYAN = "\033[96m"
 YELLOW = "\033[93m"
+
+
+@dataclass
+class RunResult:
+    """Result of a single screening loop run, used for benchmarking."""
+
+    seed_label: str
+    model: str
+    passed: bool
+    iterations: int
+    hit_iteration_limit: bool
+    total_cost_usd: float
+    input_tokens: int
+    output_tokens: int
+    final_sequence: str | None
+    final_pi: float | None
+    final_gravy: float | None
+    final_liability_count: int | None
+    final_apr_percentile: float | None
+    timestamp: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 def cot_print(msg: str) -> None:
@@ -289,7 +313,7 @@ NAIVE_SEED = (
     "TYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCAAILVCFFDGYWGQGTLVTVSS"
 )
 
-# Option 2: Pembrolizumab heavy chain VH (PDB 5DK3) — real clinical sequence,
+# Option 2: Pembrolizumab heavy chain VH (PDB 5DK3, chain B, residues 1-120) — real clinical sequence,
 # 1 liability (NG), good pI, but fully humanized FR2 (needs camelid conversion).
 PEMBROLIZUMAB_VH_SEED = (
     "QVQLVQSGVEVKKPGASVKVSCKASGYTFTNYYMYWVRQAPGQGLEWMGGINPSNGGTN"
@@ -308,6 +332,7 @@ PLOT_DIR = Path(__file__).parent / "assets"
 def _plot_biophysical_trajectory(
     points: list[dict],
     plot_name: str = "biophysical_trajectory",
+    auto_open: bool = True,
 ) -> Path:
     """Generate a multi-panel developability dashboard.
 
@@ -532,7 +557,8 @@ def _plot_biophysical_trajectory(
     fig.savefig(out_path, dpi=150, facecolor="#0a0a0a")
     plt.close(fig)
 
-    subprocess.run(["open", str(out_path)], check=False)
+    if auto_open:
+        subprocess.run(["open", str(out_path)], check=False)
 
     return out_path
 
@@ -540,13 +566,17 @@ def _plot_biophysical_trajectory(
 def run_screening_loop(
     seed_sequence: str | None = None,
     plot_name: str = "biophysical_trajectory",
-) -> None:
+    suppress_plot: bool = False,
+    seed_label: str = "none",
+) -> RunResult:
     """Run the generate → screen → critique → mutate loop.
 
     Args:
         seed_sequence: Optional starting sequence. If provided, the agent is
             asked to optimize it rather than designing from scratch.
         plot_name: Base name for the dashboard PNG (without extension).
+        suppress_plot: If True, skip dashboard generation. Use for benchmark runs.
+        seed_label: Human-readable seed name for RunResult (e.g. "naive").
     """
     api_key = os.environ.get("TOGETHER_API_KEY")
     if not api_key:
@@ -618,6 +648,9 @@ def run_screening_loop(
         cot_print("[Baseline] Seed sequence profiled as iteration 0")
 
     iteration = 0
+    final_seq: str | None = None
+    hit_limit = False
+
     for iteration in range(1, MAX_ITERATIONS + 1):
         header_print(f"ITERATION {iteration}")
 
@@ -714,6 +747,7 @@ def run_screening_loop(
                 break
 
         if last_seq:
+            final_seq = last_seq  # track for RunResult
             if iteration not in iteration_metrics:
                 iteration_metrics[iteration] = {"iteration": iteration}
             m = iteration_metrics[iteration]
@@ -736,6 +770,7 @@ def run_screening_loop(
                     m["apr_percentile"] = ap["candidate_max_patch"]["percentile"]
 
     else:
+        hit_limit = True
         warn_print(
             f"\nWARNING: Reached max iterations ({MAX_ITERATIONS}) "
             "without converging on a passing design."
@@ -774,18 +809,74 @@ def run_screening_loop(
                     dashboard_points[i][key] = dashboard_points[i + 1][key]
                     dashboard_points[i].setdefault("_imputed", set()).add(key)
 
-    if len(dashboard_points) >= 2:
-        plot_path = _plot_biophysical_trajectory(dashboard_points, plot_name)
-        cot_print(f"Developability dashboard saved: {plot_path}")
-    elif dashboard_points:
-        cot_print("Only one iteration with data — skipping dashboard.")
-    else:
-        cot_print("No metric data captured — skipping dashboard.")
+    if not suppress_plot:
+        if len(dashboard_points) >= 2:
+            plot_path = _plot_biophysical_trajectory(dashboard_points, plot_name)
+            cot_print(f"Developability dashboard saved: {plot_path}")
+        elif dashboard_points:
+            cot_print("Only one iteration with data — skipping dashboard.")
+        else:
+            cot_print("No metric data captured — skipping dashboard.")
 
     # Write session summary to log
     cot_print(f"\nSession ended: {datetime.now(UTC).isoformat()}")
     cot_print(f"Total iterations: {iteration}")
     cot_print(f"Full CoT log: {COT_LOG.resolve()}")
+
+    # --- Objective pass/fail: run all 4 tools on the final sequence ---
+    final_pi: float | None = None
+    final_gravy: float | None = None
+    final_liability_count: int | None = None
+    final_apr_percentile: float | None = None
+    passed = False
+
+    if final_seq:
+        bp = json.loads(calculate_biophysical_profile(final_seq))
+        sl = json.loads(scan_structural_liabilities(final_seq))
+        ap = json.loads(scan_aggregation_patches(final_seq))
+
+        if "error" not in bp:
+            final_pi = bp.get("isoelectric_point")
+            final_gravy = bp.get("gravy")
+        if "error" not in sl:
+            final_liability_count = sl.get("liability_count")
+        if "error" not in ap:
+            final_apr_percentile = ap.get("candidate_max_patch", {}).get("percentile")
+
+        apr_passed = (
+            ap.get("screening_result", {}).get("passed", False) if "error" not in ap else False
+        )
+        passed = (
+            (final_pi is not None and final_pi > 7.5)
+            and (final_gravy is not None and final_gravy <= 0.0)
+            and (final_liability_count == 0)
+            and apr_passed
+        )
+
+    result_label = "PASS" if passed else "FAIL"
+    cot_print(f"\nObjective result: {result_label}")
+    if final_seq:
+        cot_print(
+            f"  pI={final_pi:.2f}  GRAVY={final_gravy:.3f}  "
+            f"liabilities={final_liability_count}  APR={final_apr_percentile:.1f}th%ile"
+        )
+
+    return RunResult(
+        seed_label=seed_label,
+        model=os.environ.get("MODEL_ID", DEFAULT_MODEL),
+        passed=passed,
+        iterations=iteration,
+        hit_iteration_limit=hit_limit,
+        total_cost_usd=final_cost,
+        input_tokens=total_input_tokens,
+        output_tokens=total_output_tokens,
+        final_sequence=final_seq,
+        final_pi=final_pi,
+        final_gravy=final_gravy,
+        final_liability_count=final_liability_count,
+        final_apr_percentile=final_apr_percentile,
+        timestamp=datetime.now(UTC).isoformat(),
+    )
 
 
 if __name__ == "__main__":
@@ -810,7 +901,9 @@ if __name__ == "__main__":
         "pembrolizumab": PEMBROLIZUMAB_VH_SEED,
         "none": None,
     }
-    run_screening_loop(
+    result = run_screening_loop(
         seed_sequence=seed_map[args.seed],
         plot_name=args.plot_name,
+        seed_label=args.seed,
     )
+    sys.exit(0 if result.passed else 1)

@@ -36,8 +36,10 @@
 3. **5th roadmap tool** - FreeSASA (CPU-only, works on M1 today) for SASA-aware liability
    filtering (only flag surface-exposed PTM motifs, SASA > 25 A^2).
 4. **Tool registry pattern** - decouple tool discovery from hardcoded imports in agent_loop.
-5. Verify 5DK3 PDB citation in SCRATCHPAD.md - it doesn't contain PD-1; may need to
-   update other references that cite it as a PD-1 source.
+5. ~~Verify 5DK3 PDB citation~~ - RESOLVED. 5DK3 is a pembrolizumab Fab crystal structure
+   (chain B = heavy chain VH). The code sequence exactly matches residues 1-120. 5DK3 has
+   no PD-1 chain (unbound Fab), which is why 4ZQK was used for PD-1 - but it is the correct
+   citation for the Pembrolizumab VH seed. Citations updated to "chain B, residues 1-120".
 
 ## Key decisions
 
