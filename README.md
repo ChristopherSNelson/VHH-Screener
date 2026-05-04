@@ -54,6 +54,16 @@ Checks Kabat positions 37, 44, 45, 47 for camelid vs. human VH identity. These p
 | 45 | R | L | Charged residue replacing hydrophobic VL contact |
 | 47 | G | W | Flexible Gly replacing bulky Trp |
 
+### SASA-Aware Liability Filtering
+
+Filters the PTM liabilities identified above by solvent-accessible surface area. Loads a PDB structure, computes per-residue SASA with FreeSASA (Lee-Richards algorithm), then splits liabilities into exposed (SASA >= threshold) and buried (SASA < threshold). Buried motifs are rarely modified in practice; filtering them reduces false positives that waste agent iterations.
+
+```
+sasa_threshold = 25.0 Å²  (standard developability threshold)
+```
+
+Requires a PDB file as input - designed to be called after `predict_vhh_complex_structure`. CPU-only; no GPU required.
+
 ### Structure Prediction (Boltz-2)
 
 Predicts the 3D structure of a VHH-antigen complex using Boltz-2. Returns iptm, ptm, complex_plddt, and per-interface confidence scores. Defaults to Human PD-1 ectodomain as the antigen target.
@@ -79,10 +89,18 @@ agent_loop.py                    biologics_server.py
 │                     │          │  calculate_biophysical_profile       │
 │  Generate → Screen  │←──────── │  vhh_hallmark_audit                  │
 │  → Critique → Mutate│  JSON    │  scan_aggregation_patches            │
-└─────────────────────┘          │  predict_vhh_complex_structure (GPU) │
-        │                        └──────────────────────────────────────┘
-        ▼                                        │
-  logs/agent_cot.log                     tools/boltz2_structure.py
+└─────────────────────┘          │  filter_liabilities_by_sasa  (CPU)   │
+        │                        │  predict_vhh_complex_structure (GPU) │
+        ▼                        └──────────────────────────────────────┘
+  logs/agent_cot.log                              │
+                                         tools/boltz2_structure.py
+benchmark.py
+┌─────────────────────┐
+│  Benchmark Runner   │
+│  N runs × seed      │
+│  pass rate / cost   │
+│  → logs/*.json      │
+└─────────────────────┘
 ```
 
 Two usage modes:
@@ -123,6 +141,16 @@ Environment variables:
 
 See `examples/example_run.log` for a complete captured run (6 iterations, all PASS, $0.0077).
 
+### Benchmarking
+
+```bash
+python benchmark.py --seed naive --n 5
+python benchmark.py --seed all --n 3                          # naive + pembrolizumab + none
+python benchmark.py --seed naive pembrolizumab --n 5 --model meta-llama/Llama-3.3-70B-Instruct-Turbo
+```
+
+Runs the screening loop N times per seed/model combination. Reports pass rate, mean iterations, cost per design, and stddev. Results are saved to `logs/benchmark_<seed>_<model>_<timestamp>.json` for downstream analysis. Use this to compare seed strategies or models before committing to a longer run.
+
 ## Developability Constraints
 
 Hard requirements. A candidate does not pass unless all are satisfied.
@@ -146,7 +174,7 @@ pip install -e ".[dev]"
 python -m pytest tests/ -q
 ```
 
-69 tests covering four sequence-level screening tools and the Boltz-2 structure predictor. Regression anchors use Caplacizumab (PDB 7EOW, first approved VHH) and Pembrolizumab VH with verified expected values. Boltz-2 tests use `dry_run=True` - no GPU or model weights required.
+83 tests covering five screening tools and the Boltz-2 structure predictor. Regression anchors use Caplacizumab (PDB 7EOW, first approved VHH) and Pembrolizumab VH (PDB 5DK3, chain B) with verified expected values. Boltz-2 tests use `dry_run=True` - no GPU required. SASA filter tests download PDB 7EOW from RCSB at runtime and are skipped automatically if the network is unavailable.
 
 ## Technical Heritage
 
@@ -154,22 +182,18 @@ Zero-shot binding strategy adapted from the [Escalante 180-line approach](https:
 
 ## Roadmap
 
-Current tools are sequence-level. Planned extensions:
+Sequence-level and structure-level tools are implemented. Planned extensions:
 
-### 1. SASA-Aware Liabilities
-
-FreeSASA integration to filter PTM hotspots by solvent accessibility (SASA > 25 A^2). Buried residues are rarely modified in practice; flagging them produces false positives that waste agent iterations.
-
-### 2. Inverse Folding
+### 1. Inverse Folding
 
 AntiFold for CDR sequence optimization conditioned on 3D scaffold coordinates. Purpose-built for antibodies with better CDR sequence recovery than ProteinMPNN. Requires Boltz-2 structure prediction as a prerequisite.
 
-### 3. Immunogenicity
+### 2. Immunogenicity
 
 - AbLang2 / AntiBERTa2 for OAS-perplexity scoring - log-likelihood of the VHH sequence against Observed Antibody Space. High perplexity signals immunogenicity risk. Antibody-specific language models; more accurate than general protein models (ESM-2) for this task.
 - BigMHC for MHC presentation prediction - trained on mass-spec data (peptides actually presented on cell surface), not binding affinity proxies like NetMHCpan.
 
-### 4. Search Strategy
+### 3. Search Strategy
 
 - MCTS-based mutation exploration instead of linear iteration - explore parallel mutation branches, prune early failures, avoid local optima.
 - Multi-agent Generator vs. Screener adversarial debate - Generator proposes designs that exploit gaps in deterministic rules, driving more robust screening criteria.
