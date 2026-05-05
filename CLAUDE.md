@@ -262,6 +262,18 @@ mutate), use a text-only API call first (no `tools=` arg) so the model can reaso
 write a new sequence. Then run screening functions locally. This prevents the "same sequence
 every iteration" failure mode where the model re-screens without mutating.
 
+### Do not use `ablang2` to load ablang1 models — use `ablang` directly
+`ablang2` v0.2.1 wraps ablang1-heavy but has an internal tokenizer bug (`w_extra_tkns`
+keyword argument) that breaks all forward passes. Use `ablang.pretrained("heavy")`
+from the standalone `ablang` package instead. Do not suggest upgrading to ablang2
+until the upstream tokenizer mismatch is fixed.
+
+### Derive vocab→logit mapping from model internals at runtime
+For language models where the logit dimension ordering is unclear, build the
+AA→logit-index map from `model.tokenizer.vocab_to_token` at runtime (sort by token
+index, enumerate). Do not hardcode index mappings — they can silently drift across
+model versions.
+
 <!-- Add entries here as they happen. Format: date, what went wrong, rule added. -->
 <!-- Example:
 - 2026-03-07: Claude used hg19 coordinates with an hg38 reference. Rule: always confirm genome build before writing pipeline code.

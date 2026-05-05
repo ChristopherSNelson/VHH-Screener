@@ -774,5 +774,119 @@ def predict_vhh_complex_structure(
     return output
 
 
+@mcp.tool()
+def score_immunogenicity(sequence: str, device: str = "cpu") -> str:
+    """Score a VHH sequence for immunogenicity risk using AbLang2.
+
+    AbLang2 (ablang1-heavy model) is trained on the Observed Antibody Space (OAS)
+    database of >2 billion antibody sequences. It scores sequences by pseudo-perplexity:
+    the mean negative log-likelihood of each residue when masked. Lower perplexity
+    means the sequence looks more like a natural human antibody — lower immunogenicity.
+
+    Pseudo-perplexity is computed by masking each position in turn (Salazar et al. 2020).
+    This is more accurate than a single forward pass because each residue is scored
+    without access to its own identity.
+
+    Risk thresholds (empirically derived from OAS distribution):
+      perplexity < 5   Low risk  — sequence is human-like
+      5 <= ppl < 10    Moderate  — humanization of flagged positions recommended
+      perplexity >= 10 High risk — framework grafting strongly recommended
+
+    Note: Camelid FR2 hallmarks (F37/E44/R45/G47) will naturally score higher than
+    human VH equivalents. This is expected and does not indicate manufacturing risk.
+
+    Args:
+        sequence: Single-letter amino acid sequence of the VHH.
+        device: Inference device — "cpu", "mps" (Apple Silicon), or "cuda".
+
+    Returns:
+        JSON string with:
+            sequence_length: int
+            perplexity: float
+            mean_nll: float
+            per_residue_nll: list[float]
+            risk_level: "low" | "moderate" | "high"
+            interpretation: str
+            model: str
+            reference: str
+    """
+    from tools.ablang2_immunogenicity import score_sequence
+
+    seq = _clean_sequence(sequence)
+    result = score_sequence(seq, device=device)
+    output = json.dumps(result, indent=2)
+    logger.info(
+        "score_immunogenicity | len=%d | perplexity=%.2f | risk=%s",
+        len(seq),
+        result.get("perplexity", -1),
+        result.get("risk_level", "unknown"),
+    )
+    return output
+
+
+@mcp.tool()
+def optimize_cdr_sequences(
+    pdb_path: str,
+    vhh_chain: str = "A",
+    cdrs_to_redesign: list[str] | None = None,
+    num_samples: int = 10,
+    temperature: float = 0.20,
+    device: str = "cpu",
+) -> str:
+    """Redesign VHH CDR sequences conditioned on a 3D scaffold using AntiFold.
+
+    AntiFold is a purpose-built antibody inverse folding model trained on SAbDab
+    structures. It outperforms ProteinMPNN on CDR sequence recovery benchmarks
+    because it was fine-tuned with antibody-specific CDR masking.
+
+    Workflow:
+      1. Run predict_vhh_complex_structure to get a PDB file.
+      2. Pass structure_path from that output as pdb_path here.
+      3. AntiFold holds the framework backbone fixed and samples new CDR sequences.
+      4. Run all 4 developability screens on each candidate before advancing.
+
+    Temperature:
+      0.10-0.20  Conservative — stays close to wild-type character (recommended for CDR3)
+      0.30-0.50  Diverse — explores sequence space more broadly
+
+    Args:
+        pdb_path: Path to PDB file from predict_vhh_complex_structure.
+        vhh_chain: Chain ID of the VHH in the PDB. Default "A".
+        cdrs_to_redesign: CDRs to redesign. Default ["CDR3"]. Options: "CDR1", "CDR2", "CDR3".
+        num_samples: Number of candidate sequences to generate. Default 10.
+        temperature: Sampling temperature. Lower = more conservative. Default 0.20.
+        device: "cpu", "mps" (Apple Silicon), or "cuda". GPU strongly recommended.
+
+    Returns:
+        JSON string with:
+            status: "success" | "error" | "antifold_not_installed"
+            redesigned_sequences: list of {sequence, log_likelihood, header}
+            cdrs_redesigned: list[str]
+            pdb_path: str
+            error: str | None
+    """
+    from tools.antifold_inverse_fold import optimize_cdrs
+
+    if cdrs_to_redesign is None:
+        cdrs_to_redesign = ["CDR3"]
+
+    result = optimize_cdrs(
+        pdb_path=pdb_path,
+        vhh_chain=vhh_chain,
+        cdrs_to_redesign=cdrs_to_redesign,
+        num_samples=num_samples,
+        temperature=temperature,
+        device=device,
+    )
+    output = json.dumps(result, indent=2)
+    logger.info(
+        "optimize_cdr_sequences | pdb=%s | cdrs=%s | status=%s",
+        pdb_path,
+        cdrs_to_redesign,
+        result.get("status"),
+    )
+    return output
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

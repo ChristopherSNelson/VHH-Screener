@@ -293,7 +293,8 @@ class TestScanAggregationPatches:
     def test_naive_seed_fails(self, naive_seed):
         result = parse(scan_aggregation_patches(naive_seed))
         assert result["overall_flag"] == "FAIL"
-        assert result["candidate_max_patch"]["percentile"] == pytest.approx(100.0, abs=1.0)
+        # CDR3 IVF cluster → worst window CASIVFS → 96.6th percentile (fails > 95th threshold)
+        assert result["candidate_max_patch"]["percentile"] > 95.0
 
     def test_flagged_patches_structure(self, naive_seed):
         result = parse(scan_aggregation_patches(naive_seed))

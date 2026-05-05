@@ -287,11 +287,14 @@ sequence in the ```sequence block. Do not truncate — write the complete sequen
 # Seed sequences for different starting points
 # ---------------------------------------------------------------------------
 
-# Option 1: Deliberately bad naive VHH — 7 liabilities, low pI, APR 100th %ile,
-# fully humanized FR2. Maximises the red→green arc in the dashboard.
+# Option 1: Deliberately bad naive VHH — 7 liabilities, low pI, APR 96.6th %ile,
+# fully humanized FR2. Designed to require ~8 iterations to pass all constraints.
+# CDR3 = ASIVFSYDGY: IVF cluster drives APR failure (worst window CASIVFS, 96.6th %ile).
+# The agent can fix APR with a single F→Y or V→E substitution in CDR3.
+# DG at CDR3 pos 8-9 adds an isomerization liability alongside the framework NG/NS motifs.
 NAIVE_SEED = (
     "EVQLVESGGGLVQPGGSLRLSCAASGFTFSNGYMSNGWVRQAPGKGLEWVSDGISNGGS"
-    "TYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCAAILVCFFDGYWGQGTLVTVSS"
+    "TYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCASIVFSYDGYWGQGTLVTVSS"
 )
 
 # Option 2: Pembrolizumab heavy chain VH (PDB 5DK3, chain B, residues 1-120) — real clinical sequence,

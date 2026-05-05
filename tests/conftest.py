@@ -28,11 +28,13 @@ def caplacizumab_seq() -> str:
 
 @pytest.fixture
 def naive_seed() -> str:
-    # Deliberately bad VHH - 7 liabilities, pI=5.18 FAIL, APR 100th percentile FAIL
-    # Includes an intentional space to test whitespace stripping
+    # Deliberately bad VHH - multiple liabilities, pI FAIL, APR 96.6th percentile FAIL
+    # CDR3 = ASIVFSYDGY: IVF cluster → worst window CASIVFS (96.6th %ile), fixable with
+    # one F→Y or V→E substitution. DG at CDR3 pos 8-9 = isomerization liability.
+    # Includes an intentional space to test whitespace stripping.
     return (
         "EVQLVESGGGLVQPGGSLRLSCAASGFTFSNGYMSNGWVRQAPGKGLEWVSDGISNGGS"
-        "TYYAD SVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCAAILVCFFDGYWGQGTLVTVSS"
+        "TYYAD SVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCASIVFSYDGYWGQGTLVTVSS"
     )
 
 
