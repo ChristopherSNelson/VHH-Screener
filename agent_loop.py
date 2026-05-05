@@ -579,6 +579,8 @@ def build_screening_message(
     ap: dict,
     ha: dict,
     iteration: int,
+    best_seq: str | None = None,
+    best_score: int = 0,
 ) -> str:
     """Build a rich screening results message to inject into the conversation."""
     pi = bp.get("isoelectric_point")
@@ -600,6 +602,7 @@ def build_screening_message(
 
     lines = [
         f"[Screener] Iteration {iteration} results ({len(seq)} AA):",
+        f"  Sequence: {seq}",
         f"  pI    = {pi:.2f} {flag(pi_ok)}  ({'PASS' if pi_ok else 'FAIL — must be > 7.5; add Lys/Arg substitutions'})",
         f"  GRAVY = {gravy:.3f} {flag(gravy_ok)}  ({'PASS' if gravy_ok else 'FAIL — must be ≤ 0.0; replace hydrophobic residues'})",
         f"  PTM liabilities: {liab_count} {flag(liab_ok)}",
@@ -625,9 +628,16 @@ def build_screening_message(
     if score == 4:
         lines.append("Write your final summary of all mutations made.")
     else:
+        # Carry-forward: always remind the agent of the best sequence so far so it
+        # doesn't revert to an earlier, worse design after context truncation.
+        if best_seq and best_seq != seq and best_score >= score:
+            lines.append(
+                f"\nBEST SEQUENCE SO FAR (score {best_score}/4) — start mutations from this:\n"
+                f"```sequence\n{best_seq}\n```"
+            )
         lines.append(
-            "Analyse the failures above, apply targeted mutations, and write "
-            "your revised full sequence in a ```sequence block."
+            "Analyse the failures above, apply targeted mutations to the sequence above, "
+            "and write your revised full sequence in a ```sequence block."
         )
 
     return "\n".join(lines)
@@ -722,6 +732,8 @@ def run_screening_loop(
     hit_limit = False
     _all_passed = False
     _consecutive_no_seq = 0  # guard against repeated parse failures
+    best_seq: str | None = seed_sequence  # best sequence seen so far (highest score)
+    best_score: int = 0  # score of best_seq
 
     for iteration in range(1, MAX_ITERATIONS + 1):
         header_print(f"ITERATION {iteration}")
@@ -839,11 +851,6 @@ def run_screening_loop(
         if "error" not in ap:
             m["apr_percentile"] = ap["candidate_max_patch"]["percentile"]
 
-        # Build rich results message and inject into conversation
-        screening_msg = build_screening_message(new_seq, bp, sl, ap, ha, iteration)
-        cot_print(screening_msg)
-        messages.append({"role": "user", "content": screening_msg})
-
         # Check objective pass
         pi = bp.get("isoelectric_point")
         gravy = bp.get("gravy")
@@ -858,6 +865,27 @@ def run_screening_loop(
             and apr_pct is not None
             and apr_pct < 95.0
         )
+
+        # Update carry-forward best
+        current_score = sum(
+            [
+                pi is not None and pi > 7.5,
+                gravy is not None and gravy <= 0.0,
+                liab == 0,
+                apr_pct is not None and apr_pct < 95.0,
+            ]
+        )
+        if current_score >= best_score:
+            best_seq = new_seq
+            best_score = current_score
+
+        # Build rich results message and inject into conversation
+        screening_msg = build_screening_message(
+            new_seq, bp, sl, ap, ha, iteration, best_seq=best_seq, best_score=best_score
+        )
+        cot_print(screening_msg)
+        messages.append({"role": "user", "content": screening_msg})
+
         if _all_passed:
             cot_print("[Screener] ALL CONSTRAINTS SATISFIED — running final report iteration.")
             # Loop continues one more time so agent can write its final summary
