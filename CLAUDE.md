@@ -324,8 +324,8 @@ You are acting as a Senior Computational Biologics Engineer at an agentic drug d
 - DeepSeek V3 pI charge engineering: The model understands it needs Lys/Arg substitutions but takes several iterations to actually apply them to the sequence. This is a model reasoning issue, not a tool issue.
 
 #### Future Directions
-1. Structural screening: Boltz-2 for VHH-antigen complex prediction, FreeSASA for SASA-aware liability context (only flag surface-exposed PTM motifs, SASA > 25 A^2).
-2. Inverse folding: AntiFold for CDR sequence optimization pre-conditioned on 3D scaffold coordinates.
+1. ~~Structural screening: Boltz-2 for VHH-antigen complex prediction, FreeSASA for SASA-aware liability context.~~ **DONE** - `predict_vhh_complex_structure` and `filter_liabilities_by_sasa` are both implemented.
+2. Inverse folding: AntiFold for CDR sequence optimization pre-conditioned on 3D scaffold coordinates. Prerequisite (Boltz-2) is done.
 3. Immunogenicity: AbLang2/AntiBERTa2 for OAS-perplexity humanness scoring, BigMHC/PRIME 2.0 for MHC presentation prediction.
 4. Search strategy: MCTS-based mutation exploration instead of linear loop. Multi-agent Generator vs. Screener adversarial debate.
 5. Spatially-resolved aggregation: SAP mapping on solvent-exposed surface, aligned with TDC/TAP benchmarks.

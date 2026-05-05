@@ -184,7 +184,7 @@ Sequence-level and structure-level tools are implemented. Planned extensions:
 
 ### 1. Inverse Folding
 
-AntiFold for CDR sequence optimization conditioned on 3D scaffold coordinates. Purpose-built for antibodies with better CDR sequence recovery than ProteinMPNN. Requires Boltz-2 structure prediction as a prerequisite.
+AntiFold for CDR sequence optimization conditioned on 3D scaffold coordinates. Purpose-built for antibodies with better CDR sequence recovery than ProteinMPNN. Boltz-2 structure prediction (the prerequisite) is already implemented as `predict_vhh_complex_structure`.
 
 ### 2. Immunogenicity
 
